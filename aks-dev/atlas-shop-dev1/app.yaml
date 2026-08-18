@@ -1,18 +1,23 @@
 # Workload overlay (charts[].name: app → this file). Merged last.
-# Only put what is different from repo `_global.yaml` and `aks-dev/_global.yaml`.
+# Same layout as k8s-management/{cluster}/{ns}/app.yaml:
+#   global:      namespace-wide overlay of aks-dev/_global.yaml (all aliases)
+#   catalog-api: this service only (image tag, extra env)
+
+global:
+  tags:
+    application: atlas-shop
+  # cpu stays from cluster _global.yaml; this raises the memory limit for the ns.
+  resources:
+    limits:
+      memory: 1Gi
+  # Cluster still supplies SPRING_PROFILES_ACTIVE and JAVA_TOOL_OPTIONS.
+  configurations:
+    ROOT_LOG_LEVEL: DEBUG
+    APP_LOG_LEVEL: DEBUG
 
 catalog-api:
   enabled: true
   image:
-    # registry comes from global.image.registry unless you set it here
     tag: "0.1.0"
-  # Example: bump memory for this app only (cpu stays from cluster global).
-  resources:
-    limits:
-      memory: 1Gi
-  # Example: override one ConfigMap key. Other keys keep global/cluster values.
-  # ROOT_LOG_LEVEL was INFO in aks-dev/_global.yaml; this makes it DEBUG.
   configurations:
-    ROOT_LOG_LEVEL: DEBUG
-    APP_LOG_LEVEL: DEBUG
     CATALOG_FEATURE_FLAG: "true"
