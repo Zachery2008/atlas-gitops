@@ -1,7 +1,9 @@
-# Cluster overlay (aks-dev). Overrides repo _global.yaml for this cluster only.
+# Cluster overlay (aks-dev). Same role as k8s-management/{cluster}/_global.yaml:
+# identity, env tags, default resources. App ConfigMap deltas stay in app.yaml.
 
 cluster:
   name: aks-dev
+  host: aks-dev.internal
 
 global:
   tags:
@@ -9,7 +11,6 @@ global:
     location: east-us
   image:
     registry: atlas.azurecr.io
-  replicas: 1
   resources:
     requests:
       cpu: 250m
@@ -17,6 +18,11 @@ global:
     limits:
       cpu: 1000m
       memory: 768Mi
+  service:
+    type: LoadBalancer
+    annotations:
+      service.beta.kubernetes.io/azure-load-balancer-internal: "true"
   configurations:
     SPRING_PROFILES_ACTIVE: aks
     ROOT_LOG_LEVEL: INFO
+    JAVA_TOOL_OPTIONS: "-XX:+UseG1GC"

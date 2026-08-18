@@ -71,9 +71,9 @@ run on the cluster. Nobody runs `kubectl apply` for the app after Argo CD is up.
 ## Cluster layout (this repo)
 
 ```text
-_global.yaml                          # repo-wide defaults
+_global.yaml                          # org-wide only (owner tag; k8s-management: tenant-id)
 aks-dev/
-  _global.yaml                        # cluster defaults (name, registry)
+  _global.yaml                        # cluster identity, registry, resources, internal LB
   _admin/
     _global.yaml                      # Git URLs Argo uses to find the other repos
     gitops.yaml                       # optional extra values for platform-gitops
@@ -106,8 +106,8 @@ them in this order. **Later files win** on the same key.
 
 | Order | File | Typical contents |
 |------:|------|------------------|
-| 1 | `_global.yaml` | Repo defaults: `global.image`, `global.resources`, `global.configurations`, `global.service` |
-| 2 | `aks-dev/_global.yaml` | Cluster: `global.tags.environment`, larger resources, `SPRING_PROFILES_ACTIVE: aks` |
+| 1 | `_global.yaml` | Org-wide only: `global.tags.owner` (k8s-management keeps Azure tenant-id here) |
+| 2 | `aks-dev/_global.yaml` | Cluster: name/host, env tags, registry, default resources, internal LB, `SPRING_PROFILES_ACTIVE` |
 | 3 | `aks-dev/atlas-shop-dev1/app.yaml` | **This app only:** `catalog-api.image.tag`, extra ConfigMap keys, one-off resource bumps |
 
 There is **no** `_global.yaml` in the namespace folder. Argo still lists
@@ -124,8 +124,8 @@ From the committed overlay files:
 
 | Key | Source file | Value |
 |-----|-------------|--------|
-| `JAVA_TOOL_OPTIONS` | repo `_global.yaml` | `-XX:+UseG1GC` |
-| `SPRING_PROFILES_ACTIVE` | cluster `_global.yaml` | `aks` (was `default`) |
+| `JAVA_TOOL_OPTIONS` | cluster `_global.yaml` | `-XX:+UseG1GC` |
+| `SPRING_PROFILES_ACTIVE` | cluster `_global.yaml` | `aks` |
 | `ROOT_LOG_LEVEL` | `app.yaml` | `DEBUG` (was `INFO`) |
 | `APP_LOG_LEVEL` | `app.yaml` | `DEBUG` (was `INFO`) |
 | `CATALOG_FEATURE_FLAG` | `app.yaml` | `true` (new key) |
@@ -135,16 +135,15 @@ Resolved image: `atlas.azurecr.io/atlas-catalog-api:0.1.0`
 
 Resolved resources: cluster requests/limits, except **memory limit `1Gi`** from `app.yaml`.
 
-Resolved replicas: **1** from cluster `_global.yaml` (`global.replicas`).
+Resolved replicas: **1** from the `java-api` chart default.
 
 #### What to put where
 
-| Put in `global.*` (`_global.yaml` files) | Put in `catalog-api.*` (`app.yaml`) |
-|------------------------------------------|-------------------------------------|
-| Registry, pull policy, default resources | `image.tag` (changes every release) |
-| Shared log / Spring profile keys | Feature flags, app-only env |
-| Internal LB Service type + annotation | Extra resource limits for this process |
-| Replica default for the env | `enabled: false` to skip this alias |
+| Put in root `_global.yaml` | Put in `aks-dev/_global.yaml` | Put in `catalog-api.*` (`app.yaml`) |
+|---------------------------|--------------------------------|-------------------------------------|
+| Org-wide tags only | Cluster name/host, env tags | `image.tag` (changes every release) |
+| (not image, resources, or env) | Registry, default resources, internal LB | Feature flags, app-only env |
+| | Cluster-wide ConfigMap keys (`SPRING_PROFILES_ACTIVE`) | Extra resource limits for this process |
 
 Do **not** repeat the full `configurations:` block in `app.yaml` unless you are
 overriding a key. Helm merges maps; you only need the keys that change.
@@ -293,7 +292,7 @@ When `catalog-api` is Ready, the internal LB IP of Service `catalog-api` serves
 | Change | Where to edit | Then |
 |--------|----------------|------|
 | New app version | Build/push image, set `catalog-api.image.tag` in `app.yaml` | Merge to `main` |
-| Log level / ConfigMap | `global.configurations` in a `_global.yaml`, or one key under `catalog-api.configurations` in `app.yaml` | Merge to `main` |
+| Log level / ConfigMap | `global.configurations` in `aks-dev/_global.yaml`, or one key under `catalog-api.configurations` in `app.yaml` | Merge to `main` |
 | Turn the app off | `catalog-api.enabled: false` or `namespace.enabled: false` | Merge to `main` |
 | Chart defaults (probes, resources) | `java-api` in `atlas-charts-common`, then **vendor** into `atlas-charts-apps` | Merge both, then Argo |
 | Argo CD / ApplicationSets | `atlas-charts-common/charts/platform-gitops` | Merge; `admin-gitops` self-syncs |
