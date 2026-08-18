@@ -1,0 +1,5 @@
+cluster:
+  name: aks-dev
+
+image:
+  registry: atlas.azurecr.io

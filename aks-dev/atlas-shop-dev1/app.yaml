@@ -1,0 +1,12 @@
+catalog-api:
+  enabled: true
+  image:
+    registry: atlas.azurecr.io
+    name: atlas-catalog-api
+    tag: "0.1.0"
+  service:
+    type: LoadBalancer
+    annotations:
+      service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+  configurations:
+    ROOT_LOG_LEVEL: INFO

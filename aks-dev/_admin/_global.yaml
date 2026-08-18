@@ -1,0 +1,8 @@
+# Pin for admin-gitops self-sync (Git path, not OCI semver).
+version: "0.1.0"
+
+repo:
+  branch: main
+  gitops: https://github.com/Zachery2008/atlas-gitops.git
+  chartsApps: https://github.com/Zachery2008/atlas-charts-apps.git
+  chartsCommon: https://github.com/Zachery2008/atlas-charts-common.git

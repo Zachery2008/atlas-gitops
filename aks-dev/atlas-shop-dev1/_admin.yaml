@@ -1,0 +1,11 @@
+namespace:
+  enabled: true
+  version: "0.1.0"
+
+charts:
+  - name: app
+    chart: atlas-shop
+    version: "0.1.0"
+
+quotas:
+  enabled: false

@@ -1,0 +1,9 @@
+cluster:
+  name: aks-dev
+  host: aks-dev.internal
+
+repo:
+  branch: main
+  gitops: https://github.com/Zachery2008/atlas-gitops.git
+  chartsApps: https://github.com/Zachery2008/atlas-charts-apps.git
+  chartsCommon: https://github.com/Zachery2008/atlas-charts-common.git
