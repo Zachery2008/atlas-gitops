@@ -1,5 +1,5 @@
 # Workload overlay (charts[].name: app → this file). Merged last.
-# Only put what is different from global / cluster / namespace _global.yaml.
+# Only put what is different from repo `_global.yaml` and `aks-dev/_global.yaml`.
 
 catalog-api:
   enabled: true
@@ -14,4 +14,5 @@ catalog-api:
   # ROOT_LOG_LEVEL was INFO in aks-dev/_global.yaml; this makes it DEBUG.
   configurations:
     ROOT_LOG_LEVEL: DEBUG
+    APP_LOG_LEVEL: DEBUG
     CATALOG_FEATURE_FLAG: "true"

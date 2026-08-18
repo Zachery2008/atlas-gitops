@@ -64,7 +64,7 @@ run on the cluster. Nobody runs `kubectl apply` for the app after Argo CD is up.
 4. **GitOps overlays** (this repo)  
    Per-cluster folders. Dev only: `aks-dev/`. Each namespace folder has:
    - `_admin.yaml` — enable the namespace + list charts to deploy
-   - `app.yaml` — values for chart entry `name: app` (image tag, Service, env)
+   - `app.yaml` — values for chart entry `name: app` (image tag, env overrides)
 
 ---
 
@@ -79,7 +79,6 @@ aks-dev/
     gitops.yaml                       # optional extra values for platform-gitops
   atlas-shop-dev1/
     _admin.yaml                       # namespace.enabled + charts[]
-    _global.yaml                      # namespace overrides of global.*
     app.yaml                          # service-only overrides (image.tag, extra env)
 ```
 
@@ -109,8 +108,11 @@ them in this order. **Later files win** on the same key.
 |------:|------|------------------|
 | 1 | `_global.yaml` | Repo defaults: `global.image`, `global.resources`, `global.configurations`, `global.service` |
 | 2 | `aks-dev/_global.yaml` | Cluster: `global.tags.environment`, larger resources, `SPRING_PROFILES_ACTIVE: aks` |
-| 3 | `aks-dev/atlas-shop-dev1/_global.yaml` | Namespace: replicas, subsystem tags, `APP_LOG_LEVEL` |
-| 4 | `aks-dev/atlas-shop-dev1/app.yaml` | **This app only:** `catalog-api.image.tag`, extra ConfigMap keys, one-off resource bumps |
+| 3 | `aks-dev/atlas-shop-dev1/app.yaml` | **This app only:** `catalog-api.image.tag`, extra ConfigMap keys, one-off resource bumps |
+
+There is **no** `_global.yaml` in the namespace folder. Argo still lists
+`$values/aks-dev/atlas-shop-dev1/_global.yaml` with `ignoreMissingValueFiles`, so you
+can add one later; this demo does not use it.
 
 `global:` is a Helm special key: every subchart sees it as `.Values.global`.
 `java-api` **merges** `global.configurations` with `catalog-api.configurations`
@@ -124,8 +126,8 @@ From the committed overlay files:
 |-----|-------------|--------|
 | `JAVA_TOOL_OPTIONS` | repo `_global.yaml` | `-XX:+UseG1GC` |
 | `SPRING_PROFILES_ACTIVE` | cluster `_global.yaml` | `aks` (was `default`) |
-| `APP_LOG_LEVEL` | namespace `_global.yaml` | `DEBUG` (was `INFO`) |
 | `ROOT_LOG_LEVEL` | `app.yaml` | `DEBUG` (was `INFO`) |
+| `APP_LOG_LEVEL` | `app.yaml` | `DEBUG` (was `INFO`) |
 | `CATALOG_FEATURE_FLAG` | `app.yaml` | `true` (new key) |
 
 Resolved image: `atlas.azurecr.io/atlas-catalog-api:0.1.0`  
@@ -133,7 +135,7 @@ Resolved image: `atlas.azurecr.io/atlas-catalog-api:0.1.0`
 
 Resolved resources: cluster requests/limits, except **memory limit `1Gi`** from `app.yaml`.
 
-Resolved replicas: **2** from namespace `_global.yaml` (`global.replicas`).
+Resolved replicas: **1** from cluster `_global.yaml` (`global.replicas`).
 
 #### What to put where
 
@@ -159,6 +161,7 @@ catalog-api:
       memory: 1Gi
   configurations:
     ROOT_LOG_LEVEL: DEBUG
+    APP_LOG_LEVEL: DEBUG
     CATALOG_FEATURE_FLAG: "true"
 ```
 
@@ -319,13 +322,12 @@ Commit in `atlas-charts-apps`. Argo reads the umbrella from that repo.
 helm template shop atlas-charts-apps/charts/atlas-shop \
   -f atlas-gitops/_global.yaml \
   -f atlas-gitops/aks-dev/_global.yaml \
-  -f atlas-gitops/aks-dev/atlas-shop-dev1/_global.yaml \
   -f atlas-gitops/aks-dev/atlas-shop-dev1/app.yaml
 ```
 
 Confirm the ConfigMap contains merged keys (`SPRING_PROFILES_ACTIVE=aks`,
-`ROOT_LOG_LEVEL=DEBUG`, `CATALOG_FEATURE_FLAG=true`), replicas **2**, and
-memory limit **1Gi**.
+`ROOT_LOG_LEVEL=DEBUG`, `APP_LOG_LEVEL=DEBUG`, `CATALOG_FEATURE_FLAG=true`)
+and memory limit **1Gi**.
 
 App only (no cluster):
 
