@@ -145,13 +145,16 @@ Resolved replicas: **1** from the `java-api` chart default.
 | | Registry, default resources, internal LB | Shared log / env for every alias | Feature flags, service-only env |
 | | Cluster-wide ConfigMap keys (`SPRING_PROFILES_ACTIVE`) | | `enabled: false` to skip this alias |
 
-Do **not** repeat the full `configurations:` block in `app.yaml` unless you are
-overriding a key. Helm merges maps; you only need the keys that change.
+Do **not** copy the cluster `configurations:` map into `app.yaml`. Helm merges
+maps: put namespace-wide keys under `global.configurations`, and service-only
+keys under `catalog-api.configurations`.
 
 #### `app.yaml` (workload values — last file)
 
 ```yaml
 global:
+  tags:
+    application: atlas-shop
   resources:
     limits:
       memory: 1Gi
@@ -167,9 +170,9 @@ catalog-api:
     CATALOG_FEATURE_FLAG: "true"
 ```
 
-`global:` in this file overlays cluster `_global.yaml` for every alias in the
-umbrella. `catalog-api` is the Helm **alias**; keys under it override `java-api`
-defaults and matching `global.*` fields.
+`global:` overlays cluster `_global.yaml` for every alias in the umbrella.
+`catalog-api` is the Helm **alias**; keys under it override matching `global.*`
+fields (service keys win).
 
 ---
 
