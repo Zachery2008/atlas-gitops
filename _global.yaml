@@ -1,3 +1,6 @@
+# Repo-wide defaults. Applied first. Later files override matching keys.
+# Helm passes the special `global:` map into every subchart as .Values.global.
+
 cluster:
   name: aks-dev
   host: aks-dev.internal
@@ -7,3 +10,31 @@ repo:
   gitops: https://github.com/Zachery2008/atlas-gitops.git
   chartsApps: https://github.com/Zachery2008/atlas-charts-apps.git
   chartsCommon: https://github.com/Zachery2008/atlas-charts-common.git
+
+global:
+  tags:
+    owner: atlas-platform
+    application: atlas-shop
+    environment: ""
+    location: ""
+  image:
+    registry: atlas.azurecr.io
+    pullPolicy: IfNotPresent
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  service:
+    type: LoadBalancer
+    annotations:
+      service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+  # ConfigMap keys for java-api. Service overlay keys replace the same name.
+  configurations:
+    ROOT_LOG_LEVEL: INFO
+    APP_LOG_LEVEL: INFO
+    SPRING_PROFILES_ACTIVE: default
+    JAVA_TOOL_OPTIONS: "-XX:+UseG1GC"

@@ -1,12 +1,17 @@
+# Workload overlay (charts[].name: app → this file). Merged last.
+# Only put what is different from global / cluster / namespace _global.yaml.
+
 catalog-api:
   enabled: true
   image:
-    registry: atlas.azurecr.io
-    name: atlas-catalog-api
+    # registry comes from global.image.registry unless you set it here
     tag: "0.1.0"
-  service:
-    type: LoadBalancer
-    annotations:
-      service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+  # Example: bump memory for this app only (cpu stays from cluster global).
+  resources:
+    limits:
+      memory: 1Gi
+  # Example: override one ConfigMap key. Other keys keep global/cluster values.
+  # ROOT_LOG_LEVEL was INFO in aks-dev/_global.yaml; this makes it DEBUG.
   configurations:
-    ROOT_LOG_LEVEL: INFO
+    ROOT_LOG_LEVEL: DEBUG
+    CATALOG_FEATURE_FLAG: "true"

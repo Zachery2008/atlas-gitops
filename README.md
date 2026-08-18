@@ -79,7 +79,8 @@ aks-dev/
     gitops.yaml                       # optional extra values for platform-gitops
   atlas-shop-dev1/
     _admin.yaml                       # namespace.enabled + charts[]
-    app.yaml                          # catalog-api overlay
+    _global.yaml                      # namespace overrides of global.*
+    app.yaml                          # service-only overrides (image.tag, extra env)
 ```
 
 ### `_admin.yaml` (discovery file)
@@ -99,36 +100,70 @@ charts:
 
 If `namespace.enabled` is not `true`, nothing is generated for that folder.
 
-### `app.yaml` (workload values)
+### Configurations: `global` vs overrides
 
-Merged last. This is what you change to roll out a new image or log level:
+Helm **deep-merges** value files (nested maps merge; **lists replace**). Argo applies
+them in this order. **Later files win** on the same key.
+
+| Order | File | Typical contents |
+|------:|------|------------------|
+| 1 | `_global.yaml` | Repo defaults: `global.image`, `global.resources`, `global.configurations`, `global.service` |
+| 2 | `aks-dev/_global.yaml` | Cluster: `global.tags.environment`, larger resources, `SPRING_PROFILES_ACTIVE: aks` |
+| 3 | `aks-dev/atlas-shop-dev1/_global.yaml` | Namespace: replicas, subsystem tags, `APP_LOG_LEVEL` |
+| 4 | `aks-dev/atlas-shop-dev1/app.yaml` | **This app only:** `catalog-api.image.tag`, extra ConfigMap keys, one-off resource bumps |
+
+`global:` is a Helm special key: every subchart sees it as `.Values.global`.
+`java-api` **merges** `global.configurations` with `catalog-api.configurations`
+(service keys win). Same for `global.resources` vs `catalog-api.resources`.
+
+#### This demo’s resolved ConfigMap
+
+From the committed overlay files:
+
+| Key | Source file | Value |
+|-----|-------------|--------|
+| `JAVA_TOOL_OPTIONS` | repo `_global.yaml` | `-XX:+UseG1GC` |
+| `SPRING_PROFILES_ACTIVE` | cluster `_global.yaml` | `aks` (was `default`) |
+| `APP_LOG_LEVEL` | namespace `_global.yaml` | `DEBUG` (was `INFO`) |
+| `ROOT_LOG_LEVEL` | `app.yaml` | `DEBUG` (was `INFO`) |
+| `CATALOG_FEATURE_FLAG` | `app.yaml` | `true` (new key) |
+
+Resolved image: `atlas.azurecr.io/atlas-catalog-api:0.1.0`  
+(registry from `global.image`, tag from `catalog-api.image.tag`).
+
+Resolved resources: cluster requests/limits, except **memory limit `1Gi`** from `app.yaml`.
+
+Resolved replicas: **2** from namespace `_global.yaml` (`global.replicas`).
+
+#### What to put where
+
+| Put in `global.*` (`_global.yaml` files) | Put in `catalog-api.*` (`app.yaml`) |
+|------------------------------------------|-------------------------------------|
+| Registry, pull policy, default resources | `image.tag` (changes every release) |
+| Shared log / Spring profile keys | Feature flags, app-only env |
+| Internal LB Service type + annotation | Extra resource limits for this process |
+| Replica default for the env | `enabled: false` to skip this alias |
+
+Do **not** repeat the full `configurations:` block in `app.yaml` unless you are
+overriding a key. Helm merges maps; you only need the keys that change.
+
+#### `app.yaml` (workload values — last file)
 
 ```yaml
 catalog-api:
   enabled: true
   image:
-    registry: atlas.azurecr.io
-    name: atlas-catalog-api
     tag: "0.1.0"
-  service:
-    type: LoadBalancer
-    annotations:
-      service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+  resources:
+    limits:
+      memory: 1Gi
   configurations:
-    ROOT_LOG_LEVEL: INFO
+    ROOT_LOG_LEVEL: DEBUG
+    CATALOG_FEATURE_FLAG: "true"
 ```
 
-`catalog-api` is the Helm **alias**. Keys under it override `java-api` defaults.
-
-### Value-file order (last wins)
-
-Argo multi-source Helm: chart from `atlas-charts-apps`, values from **this** repo
-(`ref: values`, paths prefixed `$values/`):
-
-1. `$values/_global.yaml`
-2. `$values/aks-dev/_global.yaml`
-3. `$values/aks-dev/atlas-shop-dev1/_global.yaml` (optional; ignored if missing)
-4. `$values/aks-dev/atlas-shop-dev1/app.yaml`
+`catalog-api` is the Helm **alias**. Keys under it override `java-api` defaults
+and matching `global.*` fields.
 
 ---
 
@@ -195,8 +230,8 @@ az acr login --name atlas   # or your registry
 docker push atlas.azurecr.io/atlas-catalog-api:0.1.0
 ```
 
-If the registry name is different, change `catalog-api.image.registry` in
-`aks-dev/atlas-shop-dev1/app.yaml` (this repo) and commit.
+If the registry name is different, change `global.image.registry` in
+`aks-dev/_global.yaml` (this repo) and commit.
 
 ### 2. Install Argo CD once
 
@@ -255,7 +290,7 @@ When `catalog-api` is Ready, the internal LB IP of Service `catalog-api` serves
 | Change | Where to edit | Then |
 |--------|----------------|------|
 | New app version | Build/push image, set `catalog-api.image.tag` in `app.yaml` | Merge to `main` |
-| Log level / ConfigMap | `catalog-api.configurations` in `app.yaml` | Merge to `main` |
+| Log level / ConfigMap | `global.configurations` in a `_global.yaml`, or one key under `catalog-api.configurations` in `app.yaml` | Merge to `main` |
 | Turn the app off | `catalog-api.enabled: false` or `namespace.enabled: false` | Merge to `main` |
 | Chart defaults (probes, resources) | `java-api` in `atlas-charts-common`, then **vendor** into `atlas-charts-apps` | Merge both, then Argo |
 | Argo CD / ApplicationSets | `atlas-charts-common/charts/platform-gitops` | Merge; `admin-gitops` self-syncs |
@@ -282,11 +317,15 @@ Commit in `atlas-charts-apps`. Argo reads the umbrella from that repo.
 
 ```bash
 helm template shop atlas-charts-apps/charts/atlas-shop \
+  -f atlas-gitops/_global.yaml \
+  -f atlas-gitops/aks-dev/_global.yaml \
+  -f atlas-gitops/aks-dev/atlas-shop-dev1/_global.yaml \
   -f atlas-gitops/aks-dev/atlas-shop-dev1/app.yaml
 ```
 
-You should see a Deployment, a ConfigMap, and a Service `type: LoadBalancer`
-with the internal-LB annotation.
+Confirm the ConfigMap contains merged keys (`SPRING_PROFILES_ACTIVE=aks`,
+`ROOT_LOG_LEVEL=DEBUG`, `CATALOG_FEATURE_FLAG=true`), replicas **2**, and
+memory limit **1Gi**.
 
 App only (no cluster):
 

@@ -1,5 +1,22 @@
+# Cluster overlay (aks-dev). Overrides repo _global.yaml for this cluster only.
+
 cluster:
   name: aks-dev
 
-image:
-  registry: atlas.azurecr.io
+global:
+  tags:
+    environment: dev
+    location: east-us
+  image:
+    registry: atlas.azurecr.io
+  replicas: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 768Mi
+  configurations:
+    SPRING_PROFILES_ACTIVE: aks
+    ROOT_LOG_LEVEL: INFO
